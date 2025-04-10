@@ -82,7 +82,7 @@ class DistilBERTPredictor(SentimentPredictor):
 
             # Load model
             logger.info(f"Loading DistilBERT model from {self.model_path}")
-            self.model = DistilBERTSentimentModel.load_from_checkpoint(self.model_path)
+            self.model = DistilBERTSentimentModel.load(self.model_path)
             self.model.to(self.device)
             self.model.eval()
 
