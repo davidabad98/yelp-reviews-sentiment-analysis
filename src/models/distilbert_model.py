@@ -144,26 +144,27 @@ class DistilBERTSentimentModel(nn.Module):
             predictions = torch.argmax(logits, dim=1)
         return predictions
 
-    def save(self, path: str):
+    def save(self, path: str, training_args: dict = None, metrics: dict = None):
         """
-        Save the model.
+        Enhanced model saving with full configuration
 
         Args:
-            path: Path to save the model.
+            path: Save path
+            training_args: Training arguments from argparse
+            metrics: Validation/test metrics
         """
-        # Save model state dict and configuration
-        torch.save(
-            {
-                "model_state_dict": self.state_dict(),
-                "pretrained_model_name": DISTILBERT_CONFIG["pretrained_model_name"],
-                "num_classes": self.classifier.out_features,
-                "hidden_size": self.hidden_size,
-                "dropout": self.dropout.p,
-            },
-            path,
-        )
+        save_dict = {
+            "model_state_dict": self.state_dict(),
+            "model_config": self.distilbert.config.to_dict(),
+            "max_sequence_length": self.distilbert.config.max_position_embeddings,
+            "num_classes": self.classifier.out_features,
+            "dropout": self.dropout.p,
+            "training_args": training_args or {},
+            "metrics": metrics or {},
+        }
 
-        logger.info(f"Model saved to {path}")
+        torch.save(save_dict, path)
+        logger.info(f"Full model package saved to {path}")
 
     @classmethod
     def load(

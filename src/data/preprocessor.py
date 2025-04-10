@@ -299,6 +299,7 @@ class DistilBERTPreprocessor:
 
     def __init__(
         self,
+        tokenizer: DistilBertTokenizer,
         pretrained_model_name: str = DISTILBERT_CONFIG["pretrained_model_name"],
         max_sequence_length: int = DISTILBERT_CONFIG["max_sequence_length"],
     ):
@@ -309,7 +310,7 @@ class DistilBERTPreprocessor:
             pretrained_model_name: Pretrained model name.
             max_sequence_length: Maximum sequence length.
         """
-        self.tokenizer = DistilBertTokenizer.from_pretrained(pretrained_model_name)
+        self.tokenizer = tokenizer
         self.max_sequence_length = max_sequence_length
         logger.info(
             f"Initialized DistilBERT preprocessor with {pretrained_model_name} tokenizer"
@@ -340,8 +341,8 @@ class DistilBERTPreprocessor:
         # Tokenize and encode
         encoded = self.tokenizer(
             texts,
-            padding=padding,
-            # padding='max_length',
+            # padding=padding,
+            padding="max_length",
             truncation=truncation,
             max_length=self.max_sequence_length,
             return_tensors="pt",

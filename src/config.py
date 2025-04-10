@@ -56,7 +56,7 @@ LSTM_CONFIG = {
 DISTILBERT_CONFIG = {
     "pretrained_model_name": "distilbert-base-uncased",
     "max_sequence_length": 512,
-    "batch_size": 16,
+    "batch_size": 8,
     "learning_rate": 2e-5,
     "epochs": 3,
 }

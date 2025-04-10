@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 import torch
 from torch.utils.data import DataLoader, Dataset
+from transformers import DistilBertTokenizer
 
 from src.data.preprocessor import DistilBERTPreprocessor, LSTMPreprocessor
 
@@ -170,6 +171,7 @@ def create_data_loaders(
     model_type: str = "lstm",
     batch_size: Optional[int] = None,
     random_seed: int = 42,
+    tokenizer: Optional[DistilBertTokenizer] = None,
 ) -> Dict[str, DataLoader]:
     """
     Create PyTorch DataLoaders for training, validation, and testing.
@@ -232,7 +234,7 @@ def create_data_loaders(
 
     elif model_type.lower() == "distilbert":
         # Initialize preprocessor for DistilBERT
-        preprocessor = DistilBERTPreprocessor()
+        preprocessor = DistilBERTPreprocessor(tokenizer)
 
         # Create datasets
         train_dataset = DistilBERTYelpDataset(
