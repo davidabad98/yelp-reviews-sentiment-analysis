@@ -13,7 +13,6 @@ import torch.nn as nn
 from sklearn.metrics import classification_report
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-from transformers import get_linear_schedule_with_warmup
 
 from ..config import RANDOM_SEED
 from .metrics import compute_metrics
@@ -277,6 +276,42 @@ class Trainer:
             NotImplementedError: If not implemented by subclass
         """
         raise NotImplementedError("Subclasses must implement _process_batch")
+
+
+class LSTMTrainer(Trainer):
+    """Trainer for LSTM-based sentiment analysis models."""
+
+    def _process_batch(
+        self, batch: Dict, criterion: nn.Module
+    ) -> Tuple[torch.Tensor, List, List]:
+        """
+        Process a batch of LSTM data.
+
+        Args:
+            batch: Batch of data with text, lengths, and labels
+            criterion: Loss function
+
+        Returns:
+            Tuple containing loss, predictions and labels
+        """
+        # Move data to device
+        text = batch["text"].to(self.device)
+        lengths = batch["lengths"].to(self.device) if "lengths" in batch else None
+        labels = batch["labels"].to(self.device)
+
+        # Forward pass
+        outputs = self.model(text, lengths)
+
+        # Calculate loss
+        loss = criterion(outputs, labels)
+
+        # Get predictions
+        preds = torch.argmax(outputs, dim=1).detach().cpu().numpy()
+
+        # Get labels
+        labels = labels.detach().cpu().numpy()
+
+        return loss, preds, labels
 
 
 class DistilBERTTrainer(Trainer):

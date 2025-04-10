@@ -31,6 +31,7 @@ class LSTMSentimentModel(nn.Module):
         num_classes: int = NUM_CLASSES,
         pretrained_embeddings: Optional[np.ndarray] = None,
         freeze_embeddings: bool = False,
+        padding_idx: int = 0,
     ):
         """
         Initialize LSTM model for sentiment classification.
@@ -52,7 +53,7 @@ class LSTMSentimentModel(nn.Module):
         if pretrained_embeddings is not None:
             self.embedding = nn.Embedding.from_pretrained(
                 torch.FloatTensor(pretrained_embeddings),
-                padding_idx=0,
+                padding_idx=padding_idx,
                 freeze=freeze_embeddings,
             )
             embedding_dim = pretrained_embeddings.shape[1]
@@ -61,7 +62,9 @@ class LSTMSentimentModel(nn.Module):
             )
 
         else:
-            self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx=0)
+            self.embedding = nn.Embedding(
+                vocab_size, embedding_dim, padding_idx=padding_idx
+            )
 
         # LSTM layer
         self.lstm = nn.LSTM(

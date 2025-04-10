@@ -98,7 +98,7 @@ class LSTMYelpDataset(YelpReviewDataset):
         )
         logger.info(f"Processed {len(self.processed_texts)} texts for LSTM")
 
-    def __getitem__(self, idx: int) -> Tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         """
         Get a sample from the dataset.
 
@@ -109,9 +109,14 @@ class LSTMYelpDataset(YelpReviewDataset):
             Tuple of (preprocessed_text, label).
         """
         text = torch.tensor(self.processed_texts[idx], dtype=torch.long)
+        # Calculate length (non-zero tokens, or use actual length if needed)
+        length = torch.tensor(
+            sum(1 for token in self.processed_texts[idx] if token != 0),
+            dtype=torch.long,
+        )
         label = torch.tensor(self.labels[idx], dtype=torch.long)
 
-        return text, label
+        return {"text": text, "lengths": length, "labels": label}
 
 
 class DistilBERTYelpDataset(YelpReviewDataset):
