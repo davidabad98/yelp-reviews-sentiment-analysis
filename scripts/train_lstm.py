@@ -13,7 +13,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim import Adam
-from torch.optim.lr_scheduler import ReduceLROnPlateau
+from torch.optim.lr_scheduler import StepLR
 
 # Add the project root to the path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -213,10 +213,9 @@ def main():
     optimizer = Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     # Initialize scheduler
-    logger.info("Initializing learning rate scheduler (ReduceLROnPlateau)")
-    scheduler = ReduceLROnPlateau(
-        optimizer, mode="max", factor=0.5, patience=2, verbose=True
-    )
+    logger.info("Initializing learning rate scheduler (StepLR)")
+    scheduler = StepLR(optimizer, step_size=2, gamma=0.5)
+    scheduler.is_batch_level_scheduler = False
 
     # Loss function
     criterion = nn.CrossEntropyLoss()

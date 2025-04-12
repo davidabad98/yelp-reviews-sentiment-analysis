@@ -61,59 +61,67 @@ class YelpReviewDataset(Dataset):
         return {"review": review, "label": label}
 
 
-class LSTMYelpDataset(YelpReviewDataset):
-    """Dataset for LSTM models."""
+class LazyLSTMYelpDataset(YelpReviewDataset):
+    """Dataset for LSTM models with lazy loading."""
 
     def __init__(
         self,
         texts: List[str],
         labels: List[int],
-        preprocessor: Optional[LSTMPreprocessor] = None,
-        fit_preprocessor: bool = False,
+        preprocessor: LSTMPreprocessor,
     ):
         """
-        Initialize the LSTM dataset.
+        Initialize the lazy-loading LSTM dataset.
 
         Args:
-            texts: List of review texts.
-            labels: List of sentiment labels.
-            preprocessor: LSTM preprocessor instance.
-            fit_preprocessor: Whether to fit the preprocessor on this data.
+            texts: List of raw review texts
+            labels: List of sentiment labels
+            preprocessor: Pre-fitted LSTM preprocessor
         """
         super().__init__(texts, labels)
+        self.preprocessor = preprocessor
+        self.raw_texts = texts
 
-        # Initialize preprocessor if not provided
-        if preprocessor is None:
-            self.preprocessor = LSTMPreprocessor(
-                max_vocab_size=LSTM_CONFIG["max_vocab_size"],
-                max_sequence_length=LSTM_CONFIG["max_sequence_length"],
+        # Validate that preprocessor is already fitted
+        if self.preprocessor.word_to_idx is None:
+            raise ValueError(
+                "Preprocessor must be fitted before using with LazyLSTMYelpDataset"
             )
-        else:
-            self.preprocessor = preprocessor
 
-        # Preprocess texts
-        logger.info("Preprocessing texts for LSTM...")
-        self.processed_texts = self.preprocessor.preprocess_for_lstm(
-            texts, fit=fit_preprocessor
-        )
-        logger.info(f"Processed {len(self.processed_texts)} texts for LSTM")
+        logger.info(f"Created lazy-loading dataset with {len(texts)} samples")
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
         """
-        Get a sample from the dataset.
+        Get a sample from the dataset, preprocessing on-demand.
 
         Args:
-            idx: Index of the sample.
+            idx: Index of the sample
 
         Returns:
-            Tuple of (preprocessed_text, label).
+            Dictionary with text tensor, length, and label
         """
-        text = torch.tensor(self.processed_texts[idx], dtype=torch.long)
-        # Calculate length (non-zero tokens, or use actual length if needed)
+        # Get raw text and preprocess just this single example
+        raw_text = self.raw_texts[idx]
+
+        # Tokenize the text (using the existing preprocessor)
+        tokenized_text = self.preprocessor.preprocess([raw_text])[0]
+
+        # Convert to sequence
+        sequence = self.preprocessor.texts_to_sequences([tokenized_text])[0]
+
+        # Pad sequence
+        padded_sequence = self.preprocessor.pad_sequences([sequence])[0]
+
+        # Convert to tensor
+        text = torch.tensor(padded_sequence, dtype=torch.long)
+
+        # Calculate length (non-zero tokens)
         length = torch.tensor(
-            sum(1 for token in self.processed_texts[idx] if token != 0),
+            max(1, sum(1 for token in padded_sequence if token != 0)),
             dtype=torch.long,
         )
+
+        # Get label
         label = torch.tensor(self.labels[idx], dtype=torch.long)
 
         return {"text": text, "lengths": length, "labels": label}
@@ -177,20 +185,25 @@ def create_data_loaders(
     batch_size: Optional[int] = None,
     random_seed: int = 42,
     tokenizer: Optional[DistilBertTokenizer] = None,
+    num_workers: int = 4,  # Add this parameter for parallel loading
+    pin_memory: bool = True,  # Add this parameter for faster data transfer to GPU
 ) -> Dict[str, DataLoader]:
     """
-    Create PyTorch DataLoaders for training, validation, and testing.
+    Create PyTorch DataLoaders for training, validation, and testing with lazy loading.
 
     Args:
-        train_df: Training DataFrame.
-        test_df: Test DataFrame.
-        val_size: Validation set size as fraction of training data.
-        model_type: Model type ('lstm' or 'distilbert').
-        batch_size: Batch size. If None, use model-specific default.
-        random_seed: Random seed for reproducibility.
+        train_df: Training DataFrame
+        test_df: Test DataFrame
+        val_size: Validation set size as fraction of training data
+        model_type: Model type ('lstm' or 'distilbert')
+        batch_size: Batch size. If None, use model-specific default
+        random_seed: Random seed for reproducibility
+        tokenizer: Tokenizer for DistilBERT
+        num_workers: Number of worker processes for data loading
+        pin_memory: Whether to use pin_memory for faster data transfer to GPU
 
     Returns:
-        Dictionary with train, val, and test DataLoaders.
+        Dictionary with train, val, and test DataLoaders
     """
     # Set random seed for reproducibility
     np.random.seed(random_seed)
@@ -227,17 +240,34 @@ def create_data_loaders(
 
     # Create datasets based on model type
     if model_type.lower() == "lstm":
-        # Initialize preprocessor for LSTM
+        # Initialize and fit preprocessor on a small subset for efficiency
         preprocessor = LSTMPreprocessor()
-
-        # Create datasets
-        train_dataset = LSTMYelpDataset(
-            train_texts_split, train_labels_split, preprocessor, fit_preprocessor=True
+        # Fit on a subset of training data (this is more efficient)
+        sample_size = min(
+            100000, len(train_texts_split)
+        )  # Use at most 100K samples for vocab
+        sample_indices = np.random.choice(
+            len(train_texts_split), sample_size, replace=False
         )
-        val_dataset = LSTMYelpDataset(val_texts, val_labels, preprocessor)
-        test_dataset = LSTMYelpDataset(test_texts, test_labels, preprocessor)
+        sample_texts = [train_texts_split[i] for i in sample_indices]
+
+        # Preprocess and fit on the sample
+        tokenized_sample = preprocessor.preprocess(sample_texts)
+        preprocessor.fit(tokenized_sample)
+
+        logger.info(
+            f"Fitted preprocessor on {sample_size} samples with vocab size {preprocessor.vocab_size}"
+        )
+
+        # Create lazy-loading datasets
+        train_dataset = LazyLSTMYelpDataset(
+            train_texts_split, train_labels_split, preprocessor
+        )
+        val_dataset = LazyLSTMYelpDataset(val_texts, val_labels, preprocessor)
+        test_dataset = LazyLSTMYelpDataset(test_texts, test_labels, preprocessor)
 
     elif model_type.lower() == "distilbert":
+        # For DistilBERT, keep the existing implementation
         # Initialize preprocessor for DistilBERT
         preprocessor = DistilBERTPreprocessor(tokenizer)
 
@@ -253,11 +283,36 @@ def create_data_loaders(
             f"Unknown model type: {model_type}. Expected 'lstm' or 'distilbert'"
         )
 
-    # Create DataLoaders
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+    # Create DataLoaders with parallel loading
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,  # Parallel loading
+        pin_memory=pin_memory,  # Faster data transfer to GPU
+        persistent_workers=(
+            True if num_workers > 0 else False
+        ),  # Keep workers alive between epochs
+    )
 
-    logger.info(f"Created DataLoaders with batch size {batch_size}")
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=True if num_workers > 0 else False,
+    )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+        persistent_workers=True if num_workers > 0 else False,
+    )
+
+    logger.info(
+        f"Created DataLoaders with batch size {batch_size} and {num_workers} workers"
+    )
 
     return {"train": train_loader, "val": val_loader, "test": test_loader}

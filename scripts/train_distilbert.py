@@ -194,6 +194,7 @@ def main():
     scheduler = get_linear_schedule_with_warmup(
         optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps
     )
+    scheduler.is_batch_level_scheduler = True
 
     # Loss function
     criterion = nn.CrossEntropyLoss()

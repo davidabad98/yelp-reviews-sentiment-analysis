@@ -142,7 +142,13 @@ class TextPreprocessor:
         # Tokenize
         tokens = nltk.word_tokenize(text)
 
-        return [t for t in (self._process_token(t) for t in tokens) if t is not None]
+        result = [t for t in (self._process_token(t) for t in tokens) if t is not None]
+
+        # Add a dummy token if all tokens were filtered out
+        if not result:
+            return ["<UNK>"]  # Ensure at least one token
+
+        return result
 
     def preprocess(self, texts: List[str]) -> List[List[str]]:
         """
@@ -266,32 +272,6 @@ class LSTMPreprocessor(TextPreprocessor):
             padded_sequences.append(padded_sequence)
 
         return np.array(padded_sequences)
-
-    def preprocess_for_lstm(self, texts: List[str], fit: bool = False) -> np.ndarray:
-        """
-        Preprocess texts for LSTM model.
-
-        Args:
-            texts: List of raw texts.
-            fit: Whether to build vocabulary (for training data).
-
-        Returns:
-            Preprocessed texts as numpy array.
-        """
-        # Tokenize texts
-        tokenized_texts = self.preprocess(texts)
-
-        # Build vocabulary if needed
-        if fit or self.word_to_idx is None:
-            self.fit(tokenized_texts)
-
-        # Convert to sequences
-        sequences = self.texts_to_sequences(tokenized_texts)
-
-        # Pad sequences
-        padded_sequences = self.pad_sequences(sequences)
-
-        return padded_sequences
 
 
 class DistilBERTPreprocessor:
