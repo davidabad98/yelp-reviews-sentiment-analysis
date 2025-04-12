@@ -29,7 +29,7 @@ from src.utils.visualization import plot_confusion_matrix, plot_training_history
 # Set up argument parser
 parser = argparse.ArgumentParser(description="Train LSTM for sentiment analysis")
 parser.add_argument("--batch_size", type=int, default=64, help="Training batch size")
-parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
+parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs")
 parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
 parser.add_argument(
     "--weight_decay", type=float, default=1e-5, help="Weight decay for optimizer"
@@ -221,7 +221,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # Initialize trainer
-    trainer = LSTMTrainer(model, device)
+    trainer = LSTMTrainer(model, device, accumulation_steps=4)
 
     # Train model
     logger.info(f"Starting training for {args.epochs} epochs...")

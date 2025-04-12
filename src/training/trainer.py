@@ -46,6 +46,8 @@ class Trainer:
                 Typical usage: Set to 4-8 when facing GPU memory limitations with
                 large batches. Requires corresponding logic in the training loop
                 to accumulate gradients and only step optimizer every N batches.
+                For LSTM: 2-4 accumulation steps with batch size ~64-128
+                For DistilBERT: 4-8 accumulation steps with batch size ~16-32
         """
         self.model = model
         self.device = device

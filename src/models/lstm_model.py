@@ -76,9 +76,6 @@ class LSTMSentimentModel(nn.Module):
             bidirectional=bidirectional,
         )
 
-        # Output dimension after bidirectional LSTM
-        lstm_output_dim = hidden_dim * 2 if bidirectional else hidden_dim
-
         # Attention mechanism
         # self.attention = SelfAttention(lstm_output_dim)
 
@@ -94,6 +91,7 @@ class LSTMSentimentModel(nn.Module):
         # )
 
         # Fully connected layers
+        lstm_output_dim = hidden_dim * 2 if bidirectional else hidden_dim
         self.fc1 = nn.Linear(lstm_output_dim, hidden_dim)
         self.dropout = nn.Dropout(dropout)
         self.fc2 = nn.Linear(hidden_dim, num_classes)
@@ -149,7 +147,7 @@ class LSTMSentimentModel(nn.Module):
         embedded = self.embedding(input_ids)  # [batch_size, seq_len, embedding_dim]
 
         # Create a padding mask where 1 indicates non-padding tokens
-        mask = (input_ids != 0).float()  # [batch_size, seq_len]
+        # mask = (input_ids != 0).float()  # [batch_size, seq_len]
 
         # Pack sequences if lengths are provided
         if lengths is not None:
@@ -158,7 +156,7 @@ class LSTMSentimentModel(nn.Module):
             )
 
         # LSTM: [batch_size, seq_len, hidden_dim * (2 if bidirectional else 1)]
-        lstm_out, (hidden, cell) = self.lstm(embedded)
+        lstm_out, (hidden, _) = self.lstm(embedded)
 
         # Get final hidden state
         if self.lstm.bidirectional:
@@ -187,9 +185,9 @@ class LSTMSentimentModel(nn.Module):
         # FC layers
         out = F.relu(self.fc1(hidden))
         out = self.dropout(out)
-        out = self.fc2(out)
+        logits = self.fc2(out)
 
-        return out
+        return logits
 
     def predict(self, x: torch.Tensor) -> torch.Tensor:
         """

@@ -49,7 +49,7 @@ LSTM_CONFIG = {
     "max_sequence_length": 512,
     "batch_size": 64,
     "learning_rate": 0.001,
-    "epochs": 10,
+    "epochs": 1,  # 10,
 }
 
 # DistilBERT parameters
