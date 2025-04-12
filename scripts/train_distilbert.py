@@ -49,7 +49,7 @@ parser.add_argument(
 parser.add_argument(
     "--output_dir",
     type=str,
-    default="../models/distilbert",
+    default="models/distilbert",
     help="Directory to save model and results",
 )
 parser.add_argument(
@@ -92,7 +92,7 @@ def main():
 
     # Set up logging
     log_file = os.path.join(
-        args.output_dir, f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        "logs", f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
     )
     logger = setup_logger("distilbert_training", log_file)
 

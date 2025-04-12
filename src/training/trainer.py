@@ -148,10 +148,7 @@ class Trainer:
             if val_metrics["accuracy"] > self.best_val_accuracy:
                 self.best_val_accuracy = val_metrics["accuracy"]
                 # Save model
-                if hasattr(self.model, "save"):
-                    self.model.save(self.best_model_path)
-                else:
-                    torch.save(self.model.state_dict(), self.best_model_path)
+                self.save_model(self.best_model_path)
                 logger.info(
                     f"New best model saved with validation accuracy: {self.best_val_accuracy:.4f}"
                 )
@@ -301,6 +298,20 @@ class Trainer:
         )
 
         return metrics, all_preds, all_labels
+
+    def save_model(self, path):
+        """Save model with explicit verification."""
+        if hasattr(self.model, "save"):
+            self.model.save(path)
+        else:
+            torch.save(self.model.state_dict(), path)
+
+        # Verify file was created
+        if os.path.exists(path):
+            file_size_mb = os.path.getsize(path) / (1024 * 1024)
+            logger.info(f"✓ Model saved successfully to {path} ({file_size_mb:.2f} MB)")
+        else:
+            logger.error(f"✗ Failed to save model to {path}")
 
     def _process_batch(
         self, batch: Dict, criterion: nn.Module
