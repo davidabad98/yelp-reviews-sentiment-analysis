@@ -86,13 +86,7 @@ RATING_TO_SENTIMENT = {
     4: 2,  # Positive
 }
 # Sentiment map used for Prediction Inference
-SENTIMENT_MAP = {
-    0: "Negative",
-    2: "Negative",
-    3: "Neutral",
-    4: "Positive",
-    4: "Positive",
-}
+SENTIMENT_MAP = {0: "Negative", 1: "Neutral", 2: "Positive"}
 
 # Class names for visualization and reporting
 CLASS_NAMES = ["Negative", "Neutral", "Positive"]

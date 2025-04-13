@@ -58,7 +58,7 @@ def parse_args():
     parser.add_argument(
         "--distilbert_model_path",
         type=str,
-        # default="models/distilbert/final_distilbert.pt",
+        default="models/distilbert/final_distilbert.pt",
         help="Path to trained DistilBERT model",
     )
 
@@ -157,7 +157,7 @@ def evaluate_model(
 
     # Get predictions in batches
     texts = test_df["text"].tolist()
-    true_labels = test_df["label"].tolist()
+    true_labels = test_df["sentiment"].tolist()
 
     # Get predictions
     logger.info(

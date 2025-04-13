@@ -187,7 +187,7 @@ def create_data_loaders(
     tokenizer: Optional[DistilBertTokenizer] = None,
     num_workers: int = 4,  # Add this parameter for parallel loading
     pin_memory: bool = True,  # Add this parameter for faster data transfer to GPU
-) -> Dict[str, DataLoader]:
+):
     """
     Create PyTorch DataLoaders for training, validation, and testing with lazy loading.
 
@@ -315,4 +315,13 @@ def create_data_loaders(
         f"Created DataLoaders with batch size {batch_size} and {num_workers} workers"
     )
 
-    return {"train": train_loader, "val": val_loader, "test": test_loader}
+    if model_type.lower() == "lstm":
+        return {
+            "train": train_loader,
+            "val": val_loader,
+            "test": test_loader,
+            "vocab": preprocessor.word_to_idx,  # Return the word_to_idx as vocab
+            "preprocessor": preprocessor,  # Also return the full preprocessor
+        }
+    else:
+        return {"train": train_loader, "val": val_loader, "test": test_loader}

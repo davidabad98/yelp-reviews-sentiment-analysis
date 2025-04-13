@@ -11,6 +11,7 @@ import torch
 from transformers import DistilBertTokenizer
 
 from src.config import SENTIMENT_MAP
+from src.data.preprocessor import LSTMPreprocessor
 from src.models.lstm_model import LSTMSentimentModel
 
 from ..models.distilbert_model import DistilBERTSentimentModel
@@ -254,40 +255,37 @@ class LSTMPredictor(SentimentPredictor):
             self.model.to(self.device)
             self.model.eval()
 
-            # Load tokenizer or vocabulary
+            # Load vocabulary (word_to_idx dictionary)
             vocab_path = os.path.join(os.path.dirname(self.model_path), "vocab.pt")
             if os.path.exists(vocab_path):
                 try:
-                    loaded_obj = torch.load(vocab_path)
-                    logger.info(f"Loaded object type: {type(loaded_obj)}")
+                    self.word_to_idx = torch.load(vocab_path)
+                    logger.info(
+                        f"Loaded vocabulary with {len(self.word_to_idx)} tokens"
+                    )
 
-                    # If it's a dictionary, print the keys
-                    if isinstance(loaded_obj, dict):
-                        logger.info(f"Keys in loaded object: {list(loaded_obj.keys())}")
-                        # Maybe the vocab is stored under a key
-                        if "vocab" in loaded_obj:
-                            self.vocab = loaded_obj["vocab"]
-                        else:
-                            self.vocab = loaded_obj  # Try using the entire object
-                    else:
-                        self.vocab = loaded_obj
+                    # Create a preprocessor with the loaded vocabulary
+                    self.preprocessor = LSTMPreprocessor()
+                    self.preprocessor.word_to_idx = self.word_to_idx
+                    self.preprocessor.idx_to_word = {
+                        idx: word for word, idx in self.word_to_idx.items()
+                    }
+                    self.preprocessor.vocab_size = len(self.word_to_idx)
 
-                    logger.info(f"Vocabulary set to type: {type(self.vocab)}")
-
-                    if self.vocab is not None:
-                        logger.info(f"Loaded vocabulary with {len(self.vocab)} tokens")
-                    else:
-                        logger.error("Vocabulary is None after loading")
                 except Exception as e:
                     logger.error(f"Error loading vocabulary: {e}")
-                    self.vocab = None
+                    raise ValueError(f"Failed to load vocabulary: {e}")
             else:
                 logger.warning(f"Vocabulary not found at {vocab_path}")
-                self.vocab = None
+                raise FileNotFoundError(f"Vocabulary file not found at {vocab_path}")
 
             # Set max sequence length from config or default
             self.max_sequence_length = getattr(self.model, "max_seq_length", 256)
             logger.info(f"Using max sequence length: {self.max_sequence_length}")
+
+            self.pad_idx = self.word_to_idx.get(
+                "<PAD>", 0
+            )  # Get from vocab or default to 0
 
             logger.info("LSTM model loaded successfully")
         except Exception as e:
@@ -302,11 +300,37 @@ class LSTMPredictor(SentimentPredictor):
             text: Input text to preprocess
 
         Returns:
-            Dictionary with input tensors
+            Dictionary with input tensor
         """
-        # Implementation depends on your LSTM model's preprocessing requirements
-        # This is a placeholder that would need to be customized
-        raise NotImplementedError("LSTM preprocessing not implemented yet")
+        try:
+            # Clean the text using the LSTM preprocessor
+            tokenized_sample = self.preprocessor.preprocess([text])
+            # Tokenize into tokens
+            tokens = tokenized_sample[0]
+
+            # Convert tokens to indices, handling unknown tokens with <UNK>
+            unk_idx = self.word_to_idx.get(
+                "<UNK>", 0
+            )  # Fallback to 0 if <UNK> not present
+            sequence = [self.word_to_idx.get(token, unk_idx) for token in tokens]
+
+            # Truncate or pad sequence to max_sequence_length
+            if len(sequence) > self.max_sequence_length:
+                sequence = sequence[: self.max_sequence_length]
+            else:
+                # Pad with zeros (assuming padding index is 0)
+                sequence += [0] * (self.max_sequence_length - len(sequence))
+
+            # Convert to tensor and add batch dimension
+            input_tensor = (
+                torch.tensor(sequence, dtype=torch.long).unsqueeze(0).to(self.device)
+            )
+
+            return {"input_ids": input_tensor}
+
+        except Exception as e:
+            logger.error(f"Error during preprocessing: {str(e)}")
+            raise
 
     def predict(self, text: str) -> Dict:
         """
@@ -318,6 +342,91 @@ class LSTMPredictor(SentimentPredictor):
         Returns:
             Dictionary with prediction results
         """
-        # Implementation depends on your LSTM model's preprocessing requirements
-        # This is a placeholder that would need to be customized
-        raise NotImplementedError("LSTM prediction not implemented yet")
+        try:
+            inputs = self.preprocess(text)
+            input_ids = inputs["input_ids"]
+
+            # Model inference
+            with torch.no_grad():
+                logits = self.model(input_ids)
+
+            # Convert logits to probabilities
+            probabilities = torch.softmax(logits, dim=1).squeeze().cpu().numpy()
+            predicted_class = np.argmax(probabilities)
+
+            return {
+                "text": text,
+                "sentiment": self.sentiment_map[predicted_class],
+                "sentiment_id": predicted_class,
+                "confidence": float(probabilities[predicted_class]),
+                "probabilities": {
+                    self.sentiment_map[i]: float(prob)
+                    for i, prob in enumerate(probabilities)
+                },
+                "logits": logits.squeeze().cpu().numpy().tolist(),
+            }
+
+        except Exception as e:
+            logger.error(f"Error during prediction: {str(e)}")
+            raise
+
+    def batch_predict(self, texts: List[str], batch_size: int = 32) -> List[Dict]:
+        """
+        Batch predict sentiments using LSTM for efficiency.
+
+        Args:
+            texts: List of input texts
+            batch_size: Batch size for processing
+
+        Returns:
+            List of prediction dictionaries with original text and formatted probabilities
+        """
+        try:
+            # Validate inputs
+            if not texts:
+                return []
+
+            # Process all texts first (could be batched for memory optimization)
+            processed = [self.preprocess(text) for text in texts]
+            input_ids = torch.cat([p["input_ids"] for p in processed], dim=0)
+
+            # Split into batches for memory efficiency
+            results = []
+            for i in range(0, len(input_ids), batch_size):
+                batch_inputs = input_ids[i : i + batch_size].to(self.device)
+
+                # Batch inference
+                with torch.no_grad():
+                    batch_logits = self.model(batch_inputs)
+
+                batch_probs = torch.softmax(batch_logits, dim=1).cpu().numpy()
+                batch_preds = np.argmax(batch_probs, axis=1)
+
+                # Create results for this batch
+                for j in range(len(batch_inputs)):
+                    original_idx = i + j
+                    if original_idx >= len(texts):  # Handle edge case
+                        continue
+
+                    pred_class = batch_preds[j]
+                    results.append(
+                        {
+                            "text": texts[original_idx],  # Include original text
+                            "sentiment": self.sentiment_map.get(pred_class, "Neutral"),
+                            "sentiment_id": int(pred_class),
+                            "confidence": float(batch_probs[j][pred_class]),
+                            "probabilities": {
+                                label: float(prob)
+                                for label, prob in zip(
+                                    self.sentiment_map.values(), batch_probs[j]
+                                )
+                            },
+                            "logits": batch_logits[j].cpu().numpy().tolist(),
+                        }
+                    )
+
+            return results
+
+        except Exception as e:
+            logger.error(f"Error during batch prediction: {str(e)}")
+            raise

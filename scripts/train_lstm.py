@@ -195,7 +195,13 @@ def main():
     train_dataloader = loaders["train"]
     val_dataloader = loaders["val"]
     test_dataloader = loaders["test"]
-    vocab = loaders.get("vocab")  # Get vocabulary for model initialization
+
+    # Save vocabulary for inference
+    vocab_path = os.path.join(args.output_dir, "vocab.pt")
+    torch.save(
+        loaders["preprocessor"].word_to_idx, vocab_path
+    )  # Save the word_to_idx dictionary
+    logger.info(f"Vocabulary saved to {vocab_path}")
 
     # Get vocabulary size
     vocab_size = LSTM_CONFIG["max_vocab_size"]
@@ -257,11 +263,6 @@ def main():
         model_name="lstm",
         early_stopping_patience=args.early_stopping,
     )
-
-    # Save vocabulary for inference
-    vocab_path = os.path.join(args.output_dir, "vocab.pt")
-    torch.save(vocab, vocab_path)
-    logger.info(f"Vocabulary saved to {vocab_path}")
 
     # Plot training history
     if args.plot_results:
