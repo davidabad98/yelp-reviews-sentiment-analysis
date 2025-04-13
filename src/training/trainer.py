@@ -183,6 +183,25 @@ class Trainer:
             # Save best model
             if val_metrics["accuracy"] > self.best_val_accuracy:
                 self.best_val_accuracy = val_metrics["accuracy"]
+
+                # Validate path is writable by saving and reading a test file
+                try:
+                    test_file_path = os.path.join(output_dir, "path_test.txt")
+                    with open(test_file_path, "w") as f:
+                        f.write("Path validation test")
+
+                    # Verify we can read it back
+                    with open(test_file_path, "r") as f:
+                        content = f.read()
+
+                    # Clean up test file
+                    # os.remove(test_file_path)
+
+                    print(f"✓ Output directory {output_dir} is writable.")
+                except Exception as e:
+                    print(f"ERROR: Cannot write to output directory {output_dir}")
+                    print(f"Error details: {str(e)}")
+
                 # Save model
                 self.save_model(self.best_model_path)
                 logger.info(
@@ -419,6 +438,8 @@ class Trainer:
         if os.path.exists(path):
             file_size_mb = os.path.getsize(path) / (1024 * 1024)
             logger.info(f"✓ Model saved successfully to {path} ({file_size_mb:.2f} MB)")
+            # check the file's absolute path
+            logger.info(f"Absolute path of saved file: {os.path.abspath(path)}")
         else:
             logger.error(f"✗ Failed to save model to {path}")
 

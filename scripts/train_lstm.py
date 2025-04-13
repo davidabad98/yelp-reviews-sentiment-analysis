@@ -116,6 +116,24 @@ def main():
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
 
+    # Validate path is writable by saving and reading a test file
+    try:
+        test_file_path = os.path.join(args.output_dir, "path_test.txt")
+        with open(test_file_path, "w") as f:
+            f.write("Path validation test")
+
+        # Verify we can read it back
+        with open(test_file_path, "r") as f:
+            content = f.read()
+
+        # Clean up test file
+        os.remove(test_file_path)
+
+        print(f"✓ Output directory {args.output_dir} is writable.")
+    except Exception as e:
+        print(f"ERROR: Cannot write to output directory {args.output_dir}")
+        print(f"Error details: {str(e)}")
+
     # Set up logging
     log_file = os.path.join(
         "logs", f"training_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"

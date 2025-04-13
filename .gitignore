@@ -179,4 +179,5 @@ data/raw
 data/processed
 data/embeddings
 scripts/test.py
-DistilBertTrainingResults.txt
+models/lstm
+models/distilbert
