@@ -10,6 +10,9 @@ import numpy as np
 import torch
 from transformers import DistilBertTokenizer
 
+from src.config import SENTIMENT_MAP
+from src.models.lstm_model import LSTMSentimentModel
+
 from ..models.distilbert_model import DistilBERTSentimentModel
 
 # Set up logging
@@ -37,7 +40,7 @@ class SentimentPredictor:
         self.model = None
         self.tokenizer = None
         self.max_sequence_length = None
-        self.sentiment_map = {0: "Negative", 1: "Neutral", 2: "Positive"}
+        self.sentiment_map = SENTIMENT_MAP
 
         logger.info(f"Initialized SentimentPredictor with device: {self.device}")
 
@@ -92,7 +95,9 @@ class DistilBERTPredictor(SentimentPredictor):
             self.tokenizer = DistilBertTokenizer.from_pretrained(tokenizer_path)
 
             # Set max sequence length from config
-            self.max_sequence_length = self.model.config.max_position_embeddings
+            self.max_sequence_length = (
+                self.model.distilbert.config.max_position_embeddings
+            )
             logger.info(f"Using max sequence length: {self.max_sequence_length}")
 
             logger.info("Model and tokenizer loaded successfully")
@@ -245,18 +250,37 @@ class LSTMPredictor(SentimentPredictor):
 
             # Load model
             logger.info(f"Loading LSTM model from {self.model_path}")
-            self.model = torch.load(self.model_path, map_location=self.device)
+            self.model = LSTMSentimentModel.load(self.model_path)
             self.model.to(self.device)
             self.model.eval()
 
             # Load tokenizer or vocabulary
-            vocab_path = os.path.join(os.path.dirname(self.model_path), "vocab.pkl")
+            vocab_path = os.path.join(os.path.dirname(self.model_path), "vocab.pt")
             if os.path.exists(vocab_path):
-                import pickle
+                try:
+                    loaded_obj = torch.load(vocab_path)
+                    logger.info(f"Loaded object type: {type(loaded_obj)}")
 
-                with open(vocab_path, "rb") as f:
-                    self.vocab = pickle.load(f)
-                logger.info(f"Loaded vocabulary with {len(self.vocab)} tokens")
+                    # If it's a dictionary, print the keys
+                    if isinstance(loaded_obj, dict):
+                        logger.info(f"Keys in loaded object: {list(loaded_obj.keys())}")
+                        # Maybe the vocab is stored under a key
+                        if "vocab" in loaded_obj:
+                            self.vocab = loaded_obj["vocab"]
+                        else:
+                            self.vocab = loaded_obj  # Try using the entire object
+                    else:
+                        self.vocab = loaded_obj
+
+                    logger.info(f"Vocabulary set to type: {type(self.vocab)}")
+
+                    if self.vocab is not None:
+                        logger.info(f"Loaded vocabulary with {len(self.vocab)} tokens")
+                    else:
+                        logger.error("Vocabulary is None after loading")
+                except Exception as e:
+                    logger.error(f"Error loading vocabulary: {e}")
+                    self.vocab = None
             else:
                 logger.warning(f"Vocabulary not found at {vocab_path}")
                 self.vocab = None

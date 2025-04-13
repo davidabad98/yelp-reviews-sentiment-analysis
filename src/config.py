@@ -61,6 +61,16 @@ DISTILBERT_CONFIG = {
     "epochs": 3,
 }
 
+# Hyperparameter tuning
+TUNING_CONFIG = {
+    "lstm": {
+        "learning_rate": [1e-3, 1e-4],
+        "hidden_units": [64, 128],
+        "dropout": [0.3, 0.5],
+    },
+    "distilbert": {"learning_rate": [2e-5, 5e-5], "batch_size": [16, 32]},
+}
+
 # General training parameters
 RANDOM_SEED = 42
 NUM_CLASSES = 3  # Negative, Neutral, Positive
@@ -74,6 +84,14 @@ RATING_TO_SENTIMENT = {
     2: 1,  # Neutral
     3: 2,  # Positive
     4: 2,  # Positive
+}
+# Sentiment map used for Prediction Inference
+SENTIMENT_MAP = {
+    0: "Negative",
+    2: "Negative",
+    3: "Neutral",
+    4: "Positive",
+    4: "Positive",
 }
 
 # Class names for visualization and reporting

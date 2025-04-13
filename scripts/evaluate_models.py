@@ -31,9 +31,7 @@ from src.inference.predictor import (
 )
 from src.training.metrics import compute_confusion_matrix, compute_metrics
 from src.utils.logger import setup_logger
-from src.utils.visualization import (  # plot_prediction_examples,; plot_roc_curves,
-    plot_confusion_matrix,
-)
+from src.utils.visualization import plot_confusion_matrix, plot_prediction_examples
 
 # Initialize basic logger at module level
 logger = logging.getLogger(__name__)
@@ -51,40 +49,42 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--lstm-model-path",
+        "--lstm_model_path",
         type=str,
+        default="models/lstm/final_lstm.pt",
         help="Path to trained LSTM model",
     )
 
     parser.add_argument(
-        "--distilbert-model-path",
+        "--distilbert_model_path",
         type=str,
+        # default="models/distilbert/final_distilbert.pt",
         help="Path to trained DistilBERT model",
     )
 
     parser.add_argument(
-        "--data-path",
+        "--data_path",
         type=str,
-        default="data/processed/test.csv",
+        default="data/processed/test_with_sentiment.parquet",
         help="Path to test data CSV",
     )
 
     parser.add_argument(
-        "--output-dir",
+        "--output_dir",
         type=str,
         default="results/evaluation",
         help="Directory to save evaluation results",
     )
 
     parser.add_argument(
-        "--batch-size",
+        "--batch_size",
         type=int,
         default=32,
         help="Batch size for evaluation",
     )
 
     parser.add_argument(
-        "--sample-size",
+        "--sample_size",
         type=int,
         default=None,
         help="Number of samples to evaluate (None for all)",
@@ -93,12 +93,14 @@ def parse_args():
     parser.add_argument(
         "--metrics",
         action="store_true",
+        default=True,
         help="Calculate and print evaluation metrics",
     )
 
     parser.add_argument(
         "--plots",
         action="store_true",
+        default=True,
         help="Generate and save evaluation plots",
     )
 
@@ -110,14 +112,16 @@ def parse_args():
     )
 
     parser.add_argument(
-        "--save-predictions",
+        "--save_predictions",
         action="store_true",
+        default=True,
         help="Save all predictions to CSV",
     )
 
     parser.add_argument(
         "--comparison",
         action="store_true",
+        default=True,
         help="Compare models side by side",
     )
 
@@ -128,46 +132,7 @@ def parse_args():
         help="Random seed",
     )
 
-    parser.add_argument(
-        "--cuda-device",
-        type=int,
-        default=0,
-        help="CUDA device index to use",
-    )
-
     return parser.parse_args()
-
-
-def load_test_data(data_path: str, sample_size: Optional[int] = None) -> pd.DataFrame:
-    """
-    Load test data from file.
-
-    Args:
-        data_path: Path to test data CSV
-        sample_size: Number of samples to load (None for all)
-
-    Returns:
-        DataFrame with test data
-    """
-    logger.info(f"Loading test data from {data_path}")
-
-    if os.path.exists(data_path):
-        # Load directly from file
-        df = pd.read_csv(data_path)
-        logger.info(f"Loaded {len(df)} samples from CSV")
-    else:
-        # Load using data loader
-        logger.info("Data file not found, loading from data loader")
-        data_loader = YelpDataLoader()
-        _, df = data_loader.load_processed_data()
-        logger.info(f"Loaded {len(df)} samples from data loader")
-
-    # Take sample if specified
-    if sample_size is not None and sample_size < len(df):
-        df = df.sample(sample_size, random_state=42)
-        logger.info(f"Using random sample of {sample_size} reviews")
-
-    return df
 
 
 def evaluate_model(
@@ -456,11 +421,7 @@ def main():
         torch.cuda.manual_seed_all(args.seed)
 
     # Set device
-    device = torch.device(
-        f"cuda:{args.cuda_device}"
-        if torch.cuda.is_available() and args.cuda_device >= 0
-        else "cpu"
-    )
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     logger.info(f"Using device: {device}")
 
     # Create output directory
@@ -477,7 +438,9 @@ def main():
     file_logger.info(f"Starting model evaluation with arguments: {args}")
 
     # Load test data
-    test_df = load_test_data(args.data_path, args.sample_size)
+    logger.info("Loading and processing data...")
+    data_loader = YelpDataLoader()
+    _, test_df = data_loader.load_processed_data()
     logger.info(f"Test data shape: {test_df.shape}")
 
     results = {}

@@ -169,11 +169,9 @@ class DistilBERTSentimentModel(nn.Module):
         torch.save(save_dict, path)
 
     @classmethod
-    def load(
-        cls, path: str, device: torch.device = None
-    ) -> "DistilBERTSentimentClassifier":
+    def load(cls, path: str, device: torch.device = None) -> "DistilBERTSentimentModel":
         """
-        Load the model.
+        Load the model from a saved file.
 
         Args:
             path: Path to load the model from.
@@ -185,20 +183,35 @@ class DistilBERTSentimentModel(nn.Module):
         if device is None:
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        checkpoint = torch.load(path, map_location=device)
+        save_dict = torch.load(path, map_location=device)
 
-        # Create model with saved configuration
+        # Extract model configuration
+        num_classes = save_dict.get("num_classes", 3)  # Default to 3 if not found
+        dropout = save_dict.get("dropout", 0.1)  # Default to 0.1 if not found
+
+        # Create a new model instance with the saved configuration
         model = cls(
-            pretrained_model_name=checkpoint["pretrained_model_name"],
-            num_classes=checkpoint["num_classes"],
-            dropout=checkpoint["dropout"],
+            num_classes=num_classes,
+            dropout=dropout,
+            # You can add other parameters here if they're saved in your model
+            freeze_bert_layers=False,  # Default value or extract from save_dict if you saved it
         )
 
-        # Load weights
-        model.load_state_dict(checkpoint["model_state_dict"])
+        # Load the state dictionary
+        model.load_state_dict(save_dict["model_state_dict"])
         model.to(device)
 
         logger.info(f"Model loaded from {path}")
+        logger.info(
+            f"Model configuration: num_classes={num_classes}, dropout={dropout}"
+        )
+
+        # Optional: Log metrics if they were saved
+        if "metrics" in save_dict and save_dict["metrics"]:
+            metrics = save_dict["metrics"]
+            for metric_name, value in metrics.items():
+                logger.info(f"  {metric_name}: {value}")
+
         return model
 
 
