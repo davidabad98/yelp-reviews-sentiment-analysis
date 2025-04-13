@@ -8,6 +8,7 @@ import time
 from typing import Dict, List, Optional, Tuple
 
 import numpy as np
+import psutil
 import torch
 import torch.nn as nn
 from sklearn.metrics import classification_report
@@ -114,6 +115,7 @@ class Trainer:
         start_time = time.time()
 
         for epoch in range(num_epochs):
+            logger.debug(f"Starting epoch {epoch+1}")
             # Train for one epoch
             train_metrics = self.train_epoch(
                 train_dataloader, criterion, optimizer, scheduler
@@ -331,6 +333,30 @@ class Trainer:
         """
         raise NotImplementedError("Subclasses must implement _process_batch")
 
+    def monitor_system_resources(self, device):
+        if torch.cuda.is_available():
+            # GPU monitoring
+            current_mem = torch.cuda.memory_allocated(device) / (1024**3)  # GB
+            max_mem = torch.cuda.get_device_properties(device).total_memory / (
+                1024**3
+            )  # GB
+            percent_used = (current_mem / max_mem) * 100
+            logger.debug(
+                f"GPU Memory: {current_mem:.2f}GB / {max_mem:.2f}GB ({percent_used:.1f}%)"
+            )
+            if percent_used > 90:
+                logger.warning("⚠️ APPROACHING GPU MEMORY LIMIT!")
+
+            # CPU/RAM monitoring
+            cpu_percent = psutil.cpu_percent()
+            ram_percent = psutil.virtual_memory().percent
+            logger.debug(f"CPU: {cpu_percent}%, RAM: {ram_percent}%")
+            if ram_percent > 90:
+                logger.warning("⚠️ APPROACHING SYSTEM RAM LIMIT!")
+
+            return current_mem, max_mem
+        return 0, 0
+
 
 class LSTMTrainer(Trainer):
     """Trainer for LSTM-based sentiment analysis models."""
@@ -472,3 +498,178 @@ class DistilBERTTrainer(Trainer):
         labels = labels.detach().cpu().numpy()
 
         return loss, preds, labels
+
+    def benchmark_training(
+        self,
+        train_dataloader: DataLoader,
+        criterion: nn.Module,
+        optimizer: torch.optim.Optimizer,
+        batches: int = 50,
+        warmup_batches: int = 5,
+        profile_memory: bool = True,
+    ) -> Dict:
+        """
+        Benchmark training performance and memory usage.
+
+        Args:
+            train_dataloader: DataLoader for training data
+            criterion: Loss function
+            optimizer: Optimizer
+            batches: Number of batches to process for benchmark
+            warmup_batches: Number of warmup batches before timing
+            profile_memory: Whether to profile GPU memory usage
+
+        Returns:
+            Dict containing benchmark results
+        """
+        self.model.train()
+        device = self.device
+
+        # ====== SAFEGUARD ======
+        if torch.cuda.is_available():
+            # Get batch dimensions without consuming the iterator
+            first_batch = next(iter(train_dataloader))
+            batch_size = first_batch["input_ids"].size(0)
+            seq_len = first_batch["input_ids"].size(1)
+
+            # Memory estimation formula for transformer models
+            estimated_gb = (batch_size * seq_len**2 * 16) / (
+                8e9
+            )  # 16 bytes/param for mixed precision
+            logger.info(
+                f"Estimated memory requirement: ~{estimated_gb:.1f}GB (approximation)"
+            )
+
+            # Memory safety check
+            max_mem = torch.cuda.get_device_properties(device).total_memory / (1024**3)
+            if estimated_gb > max_mem * 0.8:
+                logger.warning(
+                    f"⚠️ Configuration might exceed GPU memory ({max_mem:.1f}GB)!"
+                )
+                response = input("Continue anyway? (y/n): ")
+                if response.lower() != "y":
+                    return {"error": "Aborted due to high memory requirements"}
+        # ====== End of safeguard ======
+
+        # Track memory usage if profiling enabled and using CUDA
+        if profile_memory and torch.cuda.is_available():
+            initial_memory = torch.cuda.memory_allocated(device) / (1024**2)  # MB
+            torch.cuda.reset_peak_memory_stats(device)
+
+        # Warm-up phase
+        logger.info(f"Starting warm-up with {warmup_batches} batches")
+        optimizer.zero_grad()
+
+        for batch_idx, batch in enumerate(train_dataloader):
+            if batch_idx % 5 == 0:  # Check every 5 batches
+                current_mem, max_mem = self.monitor_system_resources(device)
+
+            # Process batch (forward + backward)
+            loss, _, _ = self._process_batch(batch, criterion)
+            loss = loss / self.accumulation_steps
+            loss.backward()
+
+            # Step if accumulation complete
+            if (batch_idx + 1) % self.accumulation_steps == 0:
+                optimizer.step()
+                optimizer.zero_grad()
+
+        # Reset gradients after warmup
+        optimizer.zero_grad()
+
+        # Benchmarking phase
+        logger.info(f"Starting benchmark with {batches} batches")
+        total_samples = 0
+        batch_times = []
+
+        # Start timing
+        start_time = time.time()
+
+        for batch_idx, batch in enumerate(train_dataloader):
+            if batch_idx % 5 == 0:  # Check every 5 batches
+                current_mem, max_mem = self.monitor_system_resources(device)
+            if batch_idx >= batches:
+                break
+
+            batch_start = time.time()
+
+            # Process batch
+            input_ids = batch["input_ids"].to(device)
+            attention_mask = batch["attention_mask"].to(device)
+            labels = batch["labels"].to(device)
+
+            # Count samples
+            batch_size = input_ids.size(0)
+            total_samples += batch_size
+
+            # Forward pass
+            outputs = self.model(input_ids, attention_mask)
+
+            # Calculate loss
+            loss = criterion(outputs, labels)
+            loss = loss / self.accumulation_steps
+
+            # Backward pass
+            loss.backward()
+
+            # Update weights if accumulation complete
+            if (batch_idx + 1) % self.accumulation_steps == 0:
+                # Gradient clipping
+                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+
+                # Step optimizer
+                optimizer.step()
+                optimizer.zero_grad()
+
+            # Record batch time
+            batch_end = time.time()
+            batch_times.append(batch_end - batch_start)
+
+        # Ensure final update is applied if needed
+        if batches % self.accumulation_steps != 0:
+            optimizer.step()
+            optimizer.zero_grad()
+
+        # End timing
+        end_time = time.time()
+        total_time = end_time - start_time
+
+        # Calculate memory usage
+        memory_stats = {}
+        if profile_memory and torch.cuda.is_available():
+            memory_stats = {
+                "peak_memory_mb": torch.cuda.max_memory_allocated(device) / (1024**2),
+                "final_memory_mb": torch.cuda.memory_allocated(device) / (1024**2),
+                "memory_increase_mb": (torch.cuda.memory_allocated(device) / (1024**2))
+                - initial_memory,
+            }
+
+        # Calculate statistics
+        avg_time_per_batch = sum(batch_times) / len(batch_times)
+        samples_per_second = total_samples / total_time
+
+        # Prepare benchmark results
+        results = {
+            "total_batches": batches,
+            "total_samples": total_samples,
+            "total_time_seconds": total_time,
+            "avg_time_per_batch_seconds": avg_time_per_batch,
+            "samples_per_second": samples_per_second,
+            "effective_batch_size": batch_size * self.accumulation_steps,
+            "batch_times": batch_times,  # Detailed timing for each batch
+            **memory_stats,
+        }
+
+        # Log results
+        logger.info(f"Benchmark results for DistilBERT:")
+        logger.info(f"  Samples/second: {samples_per_second:.2f}")
+        logger.info(f"  Avg. batch time: {avg_time_per_batch*1000:.2f} ms")
+        logger.info(f"  Effective batch size: {batch_size * self.accumulation_steps}")
+
+        if profile_memory and torch.cuda.is_available():
+            logger.info(f"  Peak GPU memory: {memory_stats['peak_memory_mb']:.2f} MB")
+            logger.info(
+                f"  Memory increase: {memory_stats['memory_increase_mb']:.2f} MB"
+            )
+
+        return results

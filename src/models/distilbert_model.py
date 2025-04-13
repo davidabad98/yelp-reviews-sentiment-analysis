@@ -40,6 +40,9 @@ class DistilBERTSentimentModel(nn.Module):
         # Load pre-trained DistilBERT model
         self.distilbert = DistilBertModel.from_pretrained(pretrained_model_name)
 
+        # Enable gradient checkpointing to trade computation for memory by not storing all activations
+        self.distilbert.gradient_checkpointing_enable()
+
         # Get the hidden size from model config
         self.hidden_size = self.distilbert.config.hidden_size
 
@@ -164,7 +167,6 @@ class DistilBERTSentimentModel(nn.Module):
         }
 
         torch.save(save_dict, path)
-        logger.info(f"Full model package saved to {path}")
 
     @classmethod
     def load(

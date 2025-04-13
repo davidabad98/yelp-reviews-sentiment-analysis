@@ -27,7 +27,6 @@ from src.utils.visualization import plot_confusion_matrix, plot_training_history
 
 # Set up argument parser
 parser = argparse.ArgumentParser(description="Train DistilBERT for sentiment analysis")
-parser.add_argument("--batch_size", type=int, default=16, help="Training batch size")
 parser.add_argument("--epochs", type=int, default=3, help="Number of training epochs")
 parser.add_argument("--lr", type=float, default=2e-5, help="Learning rate")
 parser.add_argument(
@@ -78,7 +77,7 @@ parser.add_argument(
     "--save_every", type=int, default=None, help="Save model every N epochs"
 )
 parser.add_argument(
-    "--plot_results", action="store_true", help="Generate and save plots"
+    "--plot_results", action="store_true", default=True, help="Generate and save plots"
 )
 
 
@@ -129,7 +128,9 @@ def main():
     logger.info(f"Test set shape: {test_df.shape}")
 
     # Create data loaders
-    logger.info(f"Creating data loaders with batch size {args.batch_size}...")
+    logger.info(
+        f"Creating data loaders with batch size {DISTILBERT_CONFIG['batch_size']}..."
+    )
 
     loaders = create_data_loaders(
         train_df, test_df, 0.1, "distilbert", tokenizer=tokenizer
@@ -200,7 +201,7 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # Initialize trainer
-    trainer = DistilBERTTrainer(model, device)
+    trainer = DistilBERTTrainer(model, device, accumulation_steps=4)
 
     # Train model
     logger.info(f"Starting training for {args.epochs} epochs...")

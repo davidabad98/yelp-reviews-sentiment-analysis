@@ -269,7 +269,7 @@ def create_data_loaders(
     elif model_type.lower() == "distilbert":
         # For DistilBERT, keep the existing implementation
         # Initialize preprocessor for DistilBERT
-        preprocessor = DistilBERTPreprocessor(tokenizer)
+        preprocessor = DistilBERTPreprocessor(tokenizer=tokenizer)
 
         # Create datasets
         train_dataset = DistilBERTYelpDataset(
