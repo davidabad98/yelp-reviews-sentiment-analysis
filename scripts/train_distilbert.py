@@ -60,7 +60,7 @@ parser.add_argument(
 parser.add_argument(
     "--early_stopping",
     type=int,
-    default=None,
+    default=3,
     help="Number of epochs to wait for improvement before early stopping",
 )
 parser.add_argument(
@@ -201,7 +201,9 @@ def main():
     criterion = nn.CrossEntropyLoss()
 
     # Initialize trainer
-    trainer = DistilBERTTrainer(model, device, accumulation_steps=4)
+    trainer = DistilBERTTrainer(
+        model, device, accumulation_steps=4, use_amp=True  # Enable mixed precision
+    )
 
     # Train model
     logger.info(f"Starting training for {args.epochs} epochs...")
@@ -215,6 +217,7 @@ def main():
         output_dir=args.output_dir,
         model_name="distilbert",
         early_stopping_patience=args.early_stopping,
+        checkpoint_interval=15,  # Minutes between checkpoints
     )
 
     # Save tokenizer for inference

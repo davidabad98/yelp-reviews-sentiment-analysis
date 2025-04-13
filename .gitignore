@@ -179,3 +179,4 @@ data/raw
 data/processed
 data/embeddings
 scripts/test.py
+DistilBertTrainingResults.txt

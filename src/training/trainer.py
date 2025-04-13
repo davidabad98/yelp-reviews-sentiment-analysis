@@ -5,13 +5,15 @@ Training implementations for different models.
 import logging
 import os
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
 import numpy as np
 import psutil
+import pynvml
 import torch
 import torch.nn as nn
 from sklearn.metrics import classification_report
+from torch.cuda.amp import GradScaler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -31,6 +33,7 @@ class Trainer:
         model: nn.Module,
         device: torch.device,
         accumulation_steps: int = 1,  # parameter with default=1 (no accumulation)
+        use_amp: bool = True,  # Flag to enable Automatic Mixed Precision
     ):
         """
         Initialize the trainer.
@@ -38,7 +41,6 @@ class Trainer:
         Args:
             model: Model to train
             device: Device to train on
-        Attributes:
             accumulation_steps: Number of batches to accumulate gradients before
                 performing a parameter update. This enables effective batch size
                 enlargement while keeping memory usage manageable.
@@ -49,9 +51,11 @@ class Trainer:
                 to accumulate gradients and only step optimizer every N batches.
                 For LSTM: 2-4 accumulation steps with batch size ~64-128
                 For DistilBERT: 4-8 accumulation steps with batch size ~16-32
+            use_amp: Whether to use Automatic Mixed Precision training
         """
         self.model = model
         self.device = device
+        self.device_type = device.type  # Extract string like 'cuda' or 'cpu'
         self.history = {
             "train_loss": [],
             "train_accuracy": [],
@@ -59,11 +63,18 @@ class Trainer:
             "val_accuracy": [],
         }
         self.best_val_accuracy = 0
-        self.best_model_path = (None,)
+        self.best_model_path = None
         self.accumulation_steps = accumulation_steps
+        self.use_amp = (
+            use_amp and torch.cuda.is_available()
+        )  # Only use AMP on CUDA devices
+        self.scaler = torch.GradScaler() if self.use_amp else None
+
         logger.info(
             f"Trainer initialized with gradient accumulation over {accumulation_steps} steps"
         )
+        if self.use_amp:
+            logger.info("Automatic Mixed Precision (AMP) training enabled")
 
     def train(
         self,
@@ -76,6 +87,7 @@ class Trainer:
         output_dir: str = "models",
         model_name: str = "model",
         early_stopping_patience: int = None,
+        checkpoint_interval: int = 30,  # Minutes between checkpoints
     ) -> Dict:
         """
         Train the model.
@@ -90,6 +102,7 @@ class Trainer:
             output_dir: Directory to save model checkpoints
             model_name: Name for saved model files
             early_stopping_patience: Number of epochs to wait before early stopping
+            checkpoint_interval: Time interval in minutes between automatic checkpoints
 
         Returns:
             Dict containing training history
@@ -97,6 +110,7 @@ class Trainer:
         # Create output directory if it doesn't exist
         os.makedirs(output_dir, exist_ok=True)
         self.best_model_path = os.path.join(output_dir, f"best_{model_name}.pt")
+        checkpoint_path = os.path.join(output_dir, f"checkpoint_{model_name}.pt")
 
         # Initialize early stopping counter
         no_improve_epochs = 0
@@ -113,8 +127,28 @@ class Trainer:
 
         # Track total training time
         start_time = time.time()
+        # Track time for checkpointing
+        last_checkpoint_time = start_time
 
-        for epoch in range(num_epochs):
+        # Load checkpoint if exists
+        start_epoch = 0
+        if os.path.exists(checkpoint_path):
+            try:
+                checkpoint = torch.load(checkpoint_path)
+                self.model.load_state_dict(checkpoint["model_state_dict"])
+                optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+                if scheduler is not None and "scheduler_state_dict" in checkpoint:
+                    scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+                start_epoch = checkpoint["epoch"] + 1
+                self.history = checkpoint["history"]
+                self.best_val_accuracy = checkpoint["best_val_accuracy"]
+                if self.scaler is not None and "scaler_state_dict" in checkpoint:
+                    self.scaler.load_state_dict(checkpoint["scaler_state_dict"])
+                logger.info(f"Resuming training from epoch {start_epoch}")
+            except Exception as e:
+                logger.warning(f"Failed to load checkpoint: {e}")
+
+        for epoch in range(start_epoch, num_epochs):
             logger.debug(f"Starting epoch {epoch+1}")
             # Train for one epoch
             train_metrics = self.train_epoch(
@@ -160,6 +194,22 @@ class Trainer:
                 # Increment early stopping counter
                 no_improve_epochs += 1
 
+            # Create checkpoint at the end of each epoch
+            self._save_checkpoint(checkpoint_path, epoch, optimizer, scheduler)
+
+            # Check if it's time for a timed checkpoint
+            current_time = time.time()
+            elapsed_minutes = (current_time - last_checkpoint_time) / 60
+            if elapsed_minutes >= checkpoint_interval:
+                timed_checkpoint_path = os.path.join(
+                    output_dir, f"checkpoint_{model_name}_time_{int(current_time)}.pt"
+                )
+                self._save_checkpoint(
+                    timed_checkpoint_path, epoch, optimizer, scheduler
+                )
+                last_checkpoint_time = current_time
+                logger.info(f"Timed checkpoint saved at {timed_checkpoint_path}")
+
             # Check early stopping
             if early_stopping_patience and no_improve_epochs >= early_stopping_patience:
                 logger.info(
@@ -167,6 +217,11 @@ class Trainer:
                     f"with no improvement"
                 )
                 break
+
+        # Save final model
+        final_model_path = os.path.join(output_dir, f"final_{model_name}.pt")
+        self.save_model(final_model_path)
+        logger.info(f"Final model saved to {final_model_path}")
 
         # Calculate training time
         training_time = time.time() - start_time
@@ -177,6 +232,33 @@ class Trainer:
 
         return self.history
 
+    def _save_checkpoint(self, path, epoch, optimizer, scheduler=None):
+        """Save a checkpoint with all training state."""
+        checkpoint = {
+            "epoch": epoch,
+            "model_state_dict": self.model.state_dict(),
+            "optimizer_state_dict": optimizer.state_dict(),
+            "history": self.history,
+            "best_val_accuracy": self.best_val_accuracy,
+        }
+
+        if scheduler is not None:
+            checkpoint["scheduler_state_dict"] = scheduler.state_dict()
+
+        if self.scaler is not None:
+            checkpoint["scaler_state_dict"] = self.scaler.state_dict()
+
+        torch.save(checkpoint, path)
+
+        # Verify file was created
+        if os.path.exists(path):
+            file_size_mb = os.path.getsize(path) / (1024 * 1024)
+            logger.debug(
+                f"✓ Checkpoint saved successfully to {path} ({file_size_mb:.2f} MB)"
+            )
+        else:
+            logger.error(f"✗ Failed to save checkpoint to {path}")
+
     def train_epoch(
         self,
         dataloader: DataLoader,
@@ -185,7 +267,7 @@ class Trainer:
         scheduler=None,
     ) -> Dict:
         """
-        Train for one epoch with gradient accumulation.
+        Train for one epoch with gradient accumulation and mixed precision.
 
         Args:
             dataloader: DataLoader for training data
@@ -208,19 +290,28 @@ class Trainer:
         progress_bar = tqdm(dataloader, desc="Training", leave=False)
 
         for batch_idx, batch in enumerate(progress_bar):
-            # This must be implemented by specific trainers
-            loss, batch_preds, batch_labels = self._process_batch(batch, criterion)
+            # Process batch with or without mixed precision
+            if self.use_amp:
+                with torch.autocast(device_type=self.device_type):
+                    loss, batch_preds, batch_labels = self._process_batch(
+                        batch, criterion
+                    )
+                    # Scale loss for accumulation
+                    loss = loss / self.accumulation_steps
 
-            # Scale loss for accumulation
-            loss = loss / self.accumulation_steps
-
-            # Backward pass
-            loss.backward()
+                # Backward pass with scaler
+                self.scaler.scale(loss).backward()
+            else:
+                # Regular processing without mixed precision
+                loss, batch_preds, batch_labels = self._process_batch(batch, criterion)
+                # Scale loss for accumulation
+                loss = loss / self.accumulation_steps
+                # Backward pass
+                loss.backward()
 
             # Update running metrics
-            epoch_loss += (
-                loss.item() * self.accumulation_steps
-            )  # Rescale to get actual loss
+            # Rescale to get actual loss (since we divided for accumulation)
+            epoch_loss += loss.item() * self.accumulation_steps
             all_preds.extend(batch_preds)
             all_labels.extend(batch_labels)
 
@@ -228,11 +319,19 @@ class Trainer:
             if (batch_idx + 1) % self.accumulation_steps == 0 or (
                 batch_idx + 1 == len(dataloader)
             ):
+                if self.use_amp:
+                    # Unscale before gradient clipping
+                    self.scaler.unscale_(optimizer)
+
                 # Gradient clipping
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
 
                 # Update parameters
-                optimizer.step()
+                if self.use_amp:
+                    self.scaler.step(optimizer)
+                    self.scaler.update()
+                else:
+                    optimizer.step()
 
                 # Zero gradients
                 optimizer.zero_grad()
@@ -277,8 +376,16 @@ class Trainer:
 
         with torch.no_grad():
             for batch in progress_bar:
-                # This must be implemented by specific trainers
-                loss, batch_preds, batch_labels = self._process_batch(batch, criterion)
+                # Use mixed precision for evaluation if enabled
+                if self.use_amp:
+                    with torch.autocast(device_type=self.device_type):
+                        loss, batch_preds, batch_labels = self._process_batch(
+                            batch, criterion
+                        )
+                else:
+                    loss, batch_preds, batch_labels = self._process_batch(
+                        batch, criterion
+                    )
 
                 # Update running loss
                 epoch_loss += loss.item()
@@ -341,21 +448,34 @@ class Trainer:
                 1024**3
             )  # GB
             percent_used = (current_mem / max_mem) * 100
-            logger.debug(
+            logger.info(
                 f"GPU Memory: {current_mem:.2f}GB / {max_mem:.2f}GB ({percent_used:.1f}%)"
             )
             if percent_used > 90:
                 logger.warning("⚠️ APPROACHING GPU MEMORY LIMIT!")
 
+            self.monitor_gpu_temperature()
+
             # CPU/RAM monitoring
             cpu_percent = psutil.cpu_percent()
             ram_percent = psutil.virtual_memory().percent
-            logger.debug(f"CPU: {cpu_percent}%, RAM: {ram_percent}%")
+            logger.info(f"CPU: {cpu_percent}%, RAM: {ram_percent}%")
             if ram_percent > 90:
                 logger.warning("⚠️ APPROACHING SYSTEM RAM LIMIT!")
 
             return current_mem, max_mem
         return 0, 0
+
+    def monitor_gpu_temperature(self):
+        try:
+            pynvml.nvmlInit()
+            handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # GPU 0
+            temp = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
+            logger.info(f"GPU Temperature: {temp}°C")
+            if temp > 85:
+                logger.warning("⚠️ GPU TEMPERATURE CRITICAL!")
+        except:
+            logger.info("Unable to monitor GPU temperature")
 
 
 class LSTMTrainer(Trainer):
@@ -510,27 +630,20 @@ class DistilBERTTrainer(Trainer):
     ) -> Dict:
         """
         Benchmark training performance and memory usage.
-
-        Args:
-            train_dataloader: DataLoader for training data
-            criterion: Loss function
-            optimizer: Optimizer
-            batches: Number of batches to process for benchmark
-            warmup_batches: Number of warmup batches before timing
-            profile_memory: Whether to profile GPU memory usage
-
-        Returns:
-            Dict containing benchmark results
         """
+        logger.debug("Starting benchmark_training function")
         self.model.train()
         device = self.device
 
         # ====== SAFEGUARD ======
+        logger.debug("Running memory safeguard checks")
         if torch.cuda.is_available():
             # Get batch dimensions without consuming the iterator
             first_batch = next(iter(train_dataloader))
             batch_size = first_batch["input_ids"].size(0)
             seq_len = first_batch["input_ids"].size(1)
+
+            logger.debug(f"Sample batch size: {batch_size}, sequence length: {seq_len}")
 
             # Memory estimation formula for transformer models
             estimated_gb = (batch_size * seq_len**2 * 16) / (
@@ -553,90 +666,145 @@ class DistilBERTTrainer(Trainer):
 
         # Track memory usage if profiling enabled and using CUDA
         if profile_memory and torch.cuda.is_available():
+            logger.debug("Initializing memory tracking")
             initial_memory = torch.cuda.memory_allocated(device) / (1024**2)  # MB
             torch.cuda.reset_peak_memory_stats(device)
 
+        # Create a single dataloader iterator to avoid consuming it twice
+        logger.debug("Creating dataloader iterator")
+        dataloader_iter = iter(train_dataloader)
+
+        # Initialize counters and storage
+        total_samples = 0
+        batch_times = []
+        processed_batches = 0
+
+        # Reset gradients before starting
+        logger.debug("Resetting gradients")
+        optimizer.zero_grad()
+
         # Warm-up phase
         logger.info(f"Starting warm-up with {warmup_batches} batches")
-        optimizer.zero_grad()
+        try:
+            for warm_idx in range(warmup_batches):
+                logger.debug(f"Warmup batch {warm_idx+1}/{warmup_batches}")
 
-        for batch_idx, batch in enumerate(train_dataloader):
-            if batch_idx % 5 == 0:  # Check every 5 batches
-                current_mem, max_mem = self.monitor_system_resources(device)
+                if warm_idx % 5 == 0:
+                    current_mem, max_mem = self.monitor_system_resources(device)
 
-            # Process batch (forward + backward)
-            loss, _, _ = self._process_batch(batch, criterion)
-            loss = loss / self.accumulation_steps
-            loss.backward()
+                try:
+                    batch = next(dataloader_iter)
+                    logger.debug(f"Successfully retrieved warmup batch {warm_idx+1}")
+                except StopIteration:
+                    logger.warning("Dataloader exhausted during warmup")
+                    break
 
-            # Step if accumulation complete
-            if (batch_idx + 1) % self.accumulation_steps == 0:
-                optimizer.step()
-                optimizer.zero_grad()
+                # Process batch (forward + backward)
+                logger.debug("Running forward/backward pass for warmup")
+                loss, _, _ = self._process_batch(batch, criterion)
+                loss = loss / self.accumulation_steps
+                loss.backward()
 
-        # Reset gradients after warmup
-        optimizer.zero_grad()
+                # Step if accumulation complete
+                if (warm_idx + 1) % self.accumulation_steps == 0:
+                    logger.debug("Optimizer step for warmup")
+                    optimizer.step()
+                    optimizer.zero_grad()
+
+                processed_batches += 1
+
+            # Reset gradients after warmup
+            optimizer.zero_grad()
+            logger.debug("Completed warmup phase")
+
+        except Exception as e:
+            logger.error(f"Error during warmup phase: {str(e)}")
+            return {"error": f"Warmup failed: {str(e)}"}
 
         # Benchmarking phase
         logger.info(f"Starting benchmark with {batches} batches")
-        total_samples = 0
-        batch_times = []
 
         # Start timing
         start_time = time.time()
 
-        for batch_idx, batch in enumerate(train_dataloader):
-            if batch_idx % 5 == 0:  # Check every 5 batches
-                current_mem, max_mem = self.monitor_system_resources(device)
-            if batch_idx >= batches:
-                break
+        try:
+            for batch_idx in range(batches):
+                logger.debug(f"Benchmark batch {batch_idx+1}/{batches}")
 
-            batch_start = time.time()
+                if batch_idx % 5 == 0:
+                    current_mem, max_mem = self.monitor_system_resources(device)
 
-            # Process batch
-            input_ids = batch["input_ids"].to(device)
-            attention_mask = batch["attention_mask"].to(device)
-            labels = batch["labels"].to(device)
+                try:
+                    batch = next(dataloader_iter)
+                    logger.debug(
+                        f"Successfully retrieved benchmark batch {batch_idx+1}"
+                    )
+                except StopIteration:
+                    logger.warning("Dataloader exhausted during benchmarking")
+                    break
 
-            # Count samples
-            batch_size = input_ids.size(0)
-            total_samples += batch_size
+                batch_start = time.time()
 
-            # Forward pass
-            outputs = self.model(input_ids, attention_mask)
+                # Process batch
+                logger.debug("Moving batch to device")
+                input_ids = batch["input_ids"].to(device)
+                attention_mask = batch["attention_mask"].to(device)
+                labels = batch["labels"].to(device)
 
-            # Calculate loss
-            loss = criterion(outputs, labels)
-            loss = loss / self.accumulation_steps
+                # Count samples
+                batch_size = input_ids.size(0)
+                total_samples += batch_size
 
-            # Backward pass
-            loss.backward()
+                # Forward pass
+                logger.debug("Running forward pass")
+                outputs = self.model(input_ids, attention_mask)
 
-            # Update weights if accumulation complete
-            if (batch_idx + 1) % self.accumulation_steps == 0:
-                # Gradient clipping
-                torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+                # Calculate loss
+                logger.debug("Calculating loss")
+                loss = criterion(outputs, labels)
+                loss = loss / self.accumulation_steps
 
-                # Step optimizer
+                # Backward pass
+                logger.debug("Running backward pass")
+                loss.backward()
+
+                # Update weights if accumulation complete
+                if (batch_idx + 1) % self.accumulation_steps == 0:
+                    # Gradient clipping
+                    logger.debug("Applying gradient clipping")
+                    torch.nn.utils.clip_grad_norm_(self.model.parameters(), 1.0)
+
+                    # Step optimizer
+                    logger.debug("Optimizer step")
+                    optimizer.step()
+                    optimizer.zero_grad()
+
+                # Record batch time
+                batch_end = time.time()
+                batch_times.append(batch_end - batch_start)
+
+                processed_batches += 1
+
+            # Ensure final update is applied if needed
+            if batches % self.accumulation_steps != 0:
+                logger.debug("Final optimizer step")
                 optimizer.step()
                 optimizer.zero_grad()
 
-            # Record batch time
-            batch_end = time.time()
-            batch_times.append(batch_end - batch_start)
+            # End timing
+            end_time = time.time()
+            total_time = end_time - start_time
 
-        # Ensure final update is applied if needed
-        if batches % self.accumulation_steps != 0:
-            optimizer.step()
-            optimizer.zero_grad()
+            logger.debug("Completed benchmark phase")
 
-        # End timing
-        end_time = time.time()
-        total_time = end_time - start_time
+        except Exception as e:
+            logger.error(f"Error during benchmark phase: {str(e)}")
+            return {"error": f"Benchmark failed: {str(e)}"}
 
         # Calculate memory usage
         memory_stats = {}
         if profile_memory and torch.cuda.is_available():
+            logger.debug("Collecting memory statistics")
             memory_stats = {
                 "peak_memory_mb": torch.cuda.max_memory_allocated(device) / (1024**2),
                 "final_memory_mb": torch.cuda.memory_allocated(device) / (1024**2),
@@ -645,17 +813,25 @@ class DistilBERTTrainer(Trainer):
             }
 
         # Calculate statistics
-        avg_time_per_batch = sum(batch_times) / len(batch_times)
-        samples_per_second = total_samples / total_time
+        if batch_times:
+            avg_time_per_batch = sum(batch_times) / len(batch_times)
+            samples_per_second = total_samples / total_time if total_time > 0 else 0
+        else:
+            avg_time_per_batch = 0
+            samples_per_second = 0
 
         # Prepare benchmark results
         results = {
-            "total_batches": batches,
+            "total_batches_processed": processed_batches,
+            "warmup_batches": min(warmup_batches, processed_batches),
+            "benchmark_batches": max(0, processed_batches - warmup_batches),
             "total_samples": total_samples,
             "total_time_seconds": total_time,
             "avg_time_per_batch_seconds": avg_time_per_batch,
             "samples_per_second": samples_per_second,
-            "effective_batch_size": batch_size * self.accumulation_steps,
+            "effective_batch_size": (
+                batch_size * self.accumulation_steps if "batch_size" in locals() else 0
+            ),
             "batch_times": batch_times,  # Detailed timing for each batch
             **memory_stats,
         }
@@ -664,7 +840,7 @@ class DistilBERTTrainer(Trainer):
         logger.info(f"Benchmark results for DistilBERT:")
         logger.info(f"  Samples/second: {samples_per_second:.2f}")
         logger.info(f"  Avg. batch time: {avg_time_per_batch*1000:.2f} ms")
-        logger.info(f"  Effective batch size: {batch_size * self.accumulation_steps}")
+        logger.info(f"  Effective batch size: {results['effective_batch_size']}")
 
         if profile_memory and torch.cuda.is_available():
             logger.info(f"  Peak GPU memory: {memory_stats['peak_memory_mb']:.2f} MB")
