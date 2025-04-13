@@ -29,7 +29,7 @@ from src.utils.visualization import plot_confusion_matrix, plot_training_history
 # Set up argument parser
 parser = argparse.ArgumentParser(description="Train LSTM for sentiment analysis")
 parser.add_argument("--batch_size", type=int, default=64, help="Training batch size")
-parser.add_argument("--epochs", type=int, default=1, help="Number of training epochs")
+parser.add_argument("--epochs", type=int, default=10, help="Number of training epochs")
 parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
 parser.add_argument(
     "--weight_decay", type=float, default=1e-5, help="Weight decay for optimizer"
@@ -83,7 +83,7 @@ parser.add_argument(
 parser.add_argument(
     "--early_stopping",
     type=int,
-    default=5,
+    default=3,
     help="Number of epochs to wait for improvement before early stopping",
 )
 parser.add_argument(
@@ -104,7 +104,7 @@ parser.add_argument(
     "--save_every", type=int, default=None, help="Save model every N epochs"
 )
 parser.add_argument(
-    "--plot_results", action="store_true", help="Generate and save plots"
+    "--plot_results", action="store_true", default=True, help="Generate and save plots"
 )
 
 
@@ -123,6 +123,9 @@ def main():
     logger = setup_logger("lstm_training", log_file)
 
     logger.info(f"Starting LSTM training with arguments: {args}")
+
+    if args.plot_results:
+        logger.info("Generating training plots...")
 
     # Set random seeds
     torch.manual_seed(args.seed)

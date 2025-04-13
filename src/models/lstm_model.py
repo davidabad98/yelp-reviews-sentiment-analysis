@@ -223,7 +223,6 @@ class LSTMSentimentModel(nn.Module):
             "model_state_dict": self.state_dict(),
         }
         torch.save(state_dict, path)
-        logger.info(f"Model saved to {path}")
 
     @classmethod
     def load(cls, path: str, device: torch.device = None) -> "LSTMSentimentClassifier":
