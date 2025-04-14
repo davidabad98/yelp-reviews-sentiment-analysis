@@ -1,0 +1,76 @@
+2025-04-13 10:47:36,270 - lstm_training - INFO - Starting LSTM training with arguments: Namespace(batch_size=64, epochs=10, lr=0.001, weight_decay=1e-05, embedding_dim=None, hidden_dim=None, num_layers=None, bidirectional=False, dropout=0.3, max_vocab_size=None, max_seq_length=None, output_dir='models/lstm', validation_split=0.1, early_stopping=3, use_pretrained_embeddings=False, freeze_embeddings=False, seed=42, num_workers=4, save_every=None, plot_results=True)
+2025-04-13 10:47:36,488 - lstm_training - INFO - Using device: cuda
+2025-04-13 10:47:36,488 - lstm_training - INFO - Using maximum sequence length: 512
+2025-04-13 10:47:36,489 - lstm_training - INFO - Using embedding dimension: 300
+2025-04-13 10:47:36,489 - lstm_training - INFO - Using hidden dimension: 256
+2025-04-13 10:47:36,489 - lstm_training - INFO - Using LSTM layers: 2
+2025-04-13 10:47:36,489 - lstm_training - INFO - Using bidirectional LSTM: True
+2025-04-13 10:47:36,489 - lstm_training - INFO - Using maximum vocabulary size: 50000
+2025-04-13 10:47:36,489 - lstm_training - INFO - Loading and processing data...
+2025-04-13 10:47:36,489 - src.data.data_loader - INFO - Loading processed data from local files...
+2025-04-13 10:47:37,897 - lstm_training - INFO - Train set shape: (650000, 5)
+2025-04-13 10:47:37,897 - lstm_training - INFO - Test set shape: (50000, 3)
+2025-04-13 10:47:37,897 - lstm_training - INFO - Creating data loaders with batch size 64...
+2025-04-13 10:47:38,122 - src.data.dataset - INFO - Created data split: 585000 train, 65000 val, 50000 test
+2025-04-13 10:49:54,048 - src.data.preprocessor - INFO - Building vocabulary...
+2025-04-13 10:49:54,871 - src.data.preprocessor - INFO - Vocabulary built with 49999 words
+2025-04-13 10:49:54,875 - src.data.dataset - INFO - Fitted preprocessor on 100000 samples with vocab size 49999
+2025-04-13 10:49:54,875 - src.data.dataset - INFO - Created lazy-loading dataset with 585000 samples
+2025-04-13 10:49:54,875 - src.data.dataset - INFO - Created lazy-loading dataset with 65000 samples
+2025-04-13 10:49:54,875 - src.data.dataset - INFO - Created lazy-loading dataset with 50000 samples
+2025-04-13 10:49:54,876 - src.data.dataset - INFO - Created DataLoaders with batch size 64 and 4 workers
+2025-04-13 10:49:55,007 - lstm_training - INFO - Vocabulary size: 50000
+2025-04-13 10:49:55,007 - lstm_training - INFO - Initializing LSTM model...
+2025-04-13 10:49:55,080 - src.models.lstm_model - INFO - Initialized LSTM model with vocab_size=50000, embedding_dim=300, hidden_dim=256, num_layers=2, dropout=0.3, bidirectional=True, num_classes=3
+2025-04-13 10:49:55,335 - lstm_training - INFO - Total parameters: 17,851,843
+2025-04-13 10:49:55,335 - lstm_training - INFO - Trainable parameters: 17,851,843 (100.0%)
+2025-04-13 10:49:55,335 - lstm_training - INFO - Initializing Adam optimizer with lr=0.001, weight_decay=1e-05
+2025-04-13 10:49:56,853 - lstm_training - INFO - Initializing learning rate scheduler (StepLR)
+2025-04-13 10:49:56,853 - src.training.trainer - INFO - Trainer initialized with gradient accumulation over 4 steps
+2025-04-13 10:49:56,853 - src.training.trainer - INFO - Automatic Mixed Precision (AMP) training enabled
+2025-04-13 10:49:56,853 - lstm_training - INFO - Starting training for 10 epochs...
+2025-04-13 10:49:56,855 - src.training.trainer - INFO - Starting training with 10 epochs on device cuda
+2025-04-13 11:03:13,738 - src.training.trainer - INFO - Epoch 1/10 - Train loss: 0.5541, accuracy: 0.7653 | Val loss: 0.4674, accuracy: 0.8038        
+✓ Output directory models/lstm is writable.
+2025-04-13 11:03:13,823 - src.training.trainer - INFO - ✓ Model saved successfully to models/lstm/best_lstm.pt (68.10 MB)
+2025-04-13 11:03:13,824 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/lstm/best_lstm.pt
+2025-04-13 11:03:13,824 - src.training.trainer - INFO - New best model saved with validation accuracy: 0.8038
+2025-04-13 11:16:27,833 - src.training.trainer - INFO - Epoch 2/10 - Train loss: 0.4470, accuracy: 0.8120 | Val loss: 0.4417, accuracy: 0.8113        
+✓ Output directory models/lstm is writable.
+2025-04-13 11:16:27,902 - src.training.trainer - INFO - ✓ Model saved successfully to models/lstm/best_lstm.pt (68.10 MB)
+2025-04-13 11:16:27,902 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/lstm/best_lstm.pt
+2025-04-13 11:16:27,902 - src.training.trainer - INFO - New best model saved with validation accuracy: 0.8113
+2025-04-13 11:30:05,277 - src.training.trainer - INFO - Epoch 3/10 - Train loss: 0.4046, accuracy: 0.8301 | Val loss: 0.4231, accuracy: 0.8221        
+✓ Output directory models/lstm is writable.
+2025-04-13 11:30:05,350 - src.training.trainer - INFO - ✓ Model saved successfully to models/lstm/best_lstm.pt (68.10 MB)
+2025-04-13 11:30:05,350 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/lstm/best_lstm.pt
+2025-04-13 11:30:05,350 - src.training.trainer - INFO - New best model saved with validation accuracy: 0.8221
+2025-04-13 11:30:06,022 - src.training.trainer - INFO - Timed checkpoint saved at models/lstm/checkpoint_lstm_time_1744558205.pt
+2025-04-13 11:43:55,124 - src.training.trainer - INFO - Epoch 4/10 - Train loss: 0.3866, accuracy: 0.8380 | Val loss: 0.4211, accuracy: 0.8232        
+✓ Output directory models/lstm is writable.
+2025-04-13 11:43:55,213 - src.training.trainer - INFO - ✓ Model saved successfully to models/lstm/best_lstm.pt (68.10 MB)
+2025-04-13 11:43:55,213 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/lstm/best_lstm.pt
+2025-04-13 11:43:55,213 - src.training.trainer - INFO - New best model saved with validation accuracy: 0.8232
+2025-04-13 11:57:26,361 - src.training.trainer - INFO - Epoch 5/10 - Train loss: 0.3520, accuracy: 0.8522 | Val loss: 0.4268, accuracy: 0.8241        
+✓ Output directory models/lstm is writable.
+2025-04-13 11:57:26,450 - src.training.trainer - INFO - ✓ Model saved successfully to models/lstm/best_lstm.pt (68.10 MB)
+2025-04-13 11:57:26,451 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/lstm/best_lstm.pt
+2025-04-13 11:57:26,451 - src.training.trainer - INFO - New best model saved with validation accuracy: 0.8241
+2025-04-13 12:10:48,823 - src.training.trainer - INFO - Epoch 6/10 - Train loss: 0.3335, accuracy: 0.8602 | Val loss: 0.4387, accuracy: 0.8232        
+2025-04-13 12:10:49,378 - src.training.trainer - INFO - Timed checkpoint saved at models/lstm/checkpoint_lstm_time_1744560649.pt
+2025-04-13 12:24:10,042 - src.training.trainer - INFO - Epoch 7/10 - Train loss: 0.2999, accuracy: 0.8754 | Val loss: 0.4660, accuracy: 0.8212        
+2025-04-13 12:37:53,731 - src.training.trainer - INFO - Epoch 8/10 - Train loss: 0.2826, accuracy: 0.8831 | Val loss: 0.4773, accuracy: 0.8195        
+2025-04-13 12:37:53,979 - src.training.trainer - INFO - Early stopping triggered after 8 epochs with no improvement
+2025-04-13 12:37:54,048 - src.training.trainer - INFO - ✓ Model saved successfully to models/lstm/final_lstm.pt (68.10 MB)
+2025-04-13 12:37:54,049 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/lstm/final_lstm.pt
+2025-04-13 12:37:54,049 - src.training.trainer - INFO - Final model saved to models/lstm/final_lstm.pt
+2025-04-13 12:37:54,049 - src.training.trainer - INFO - Training completed in 6477.19 seconds (107.95 minutes)
+2025-04-13 12:37:54,050 - lstm_training - INFO - Vocabulary saved to models/lstm/vocab.pt
+2025-04-13 12:37:54,051 - lstm_training - INFO - Generating training plots...
+2025-04-13 12:37:54,598 - src.utils.visualization - INFO - Training history plot saved to models/lstm/training_history.png
+2025-04-13 12:37:54,598 - lstm_training - INFO - Evaluating on test set...
+2025-04-13 12:38:28,918 - lstm_training - INFO - Test Results:
+2025-04-13 12:38:28,919 - lstm_training - INFO -   Loss: 0.4735
+2025-04-13 12:38:28,919 - lstm_training - INFO -   Accuracy: 0.8203
+2025-04-13 12:38:28,919 - lstm_training - INFO -   F1 Score: 0.8181
+2025-04-13 12:38:28,919 - lstm_training - INFO - Training completed successfully!

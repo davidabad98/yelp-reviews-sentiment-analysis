@@ -1,0 +1,53 @@
+2025-04-13 01:55:19,182 - distilbert_training - INFO - Using device: cuda
+2025-04-13 01:55:19,182 - distilbert_training - INFO - Using maximum sequence length: 256
+2025-04-13 01:55:19,182 - distilbert_training - INFO - Initializing DistilBERT tokenizer: distilbert-base-uncased
+2025-04-13 01:55:19,312 - distilbert_training - INFO - Loading and processing data...
+2025-04-13 01:55:19,312 - src.data.data_loader - INFO - Loading processed data from local files...
+2025-04-13 01:55:20,938 - distilbert_training - INFO - Train set shape: (650000, 5)
+2025-04-13 01:55:20,939 - distilbert_training - INFO - Test set shape: (50000, 3)
+2025-04-13 01:55:20,939 - distilbert_training - INFO - Creating data loaders with batch size 32...
+2025-04-13 01:55:21,183 - src.data.dataset - INFO - Created data split: 585000 train, 65000 val, 50000 test
+2025-04-13 01:55:21,183 - src.data.preprocessor - INFO - Initialized DistilBERT preprocessor with distilbert-base-uncased tokenizer
+2025-04-13 01:55:21,213 - src.data.dataset - INFO - Created DataLoaders with batch size 32 and 4 workers
+2025-04-13 01:55:21,220 - distilbert_training - INFO - Initializing DistilBERT model...
+2025-04-13 01:55:21,368 - src.models.distilbert_model - INFO - Initialized DistilBERT model with pretrained_model=distilbert-base-uncased, hidden_size=768, num_classes=3, dropout=0.1
+2025-04-13 01:55:21,835 - distilbert_training - INFO - Total parameters: 66,365,187
+2025-04-13 01:55:21,836 - distilbert_training - INFO - Trainable parameters: 66,365,187 (100.0%)
+2025-04-13 01:55:21,836 - distilbert_training - INFO - Initializing AdamW optimizer with lr=2e-05, weight_decay=0.01
+2025-04-13 01:55:21,841 - distilbert_training - INFO - Creating learning rate scheduler with 5484 warmup steps
+2025-04-13 01:55:21,842 - src.training.trainer - INFO - Trainer initialized with gradient accumulation over 4 steps
+2025-04-13 01:55:21,842 - src.training.trainer - INFO - Automatic Mixed Precision (AMP) training enabled
+2025-04-13 01:55:21,842 - distilbert_training - INFO - Starting training for 3 epochs...
+Backend tkagg is interactive backend. Turning interactive mode on.
+2025-04-13 01:55:41,571 - src.training.trainer - INFO - Starting training with 3 epochs on device cuda
+2025-04-13 02:27:09,357 - src.training.trainer - INFO - Epoch 1/3 - Train loss: 0.5176, accuracy: 0.7782 | Val loss: 0.4159, accuracy: 0.8275         
+✓ Output directory models/distilbert is writable.
+2025-04-13 02:27:09,724 - src.training.trainer - INFO - ✓ Model saved successfully to models/distilbert/best_distilbert.pt (253.21 MB)
+2025-04-13 02:27:09,724 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/distilbert/best_distilbert.pt
+2025-04-13 02:27:09,724 - src.training.trainer - INFO - New best model saved with validation accuracy: 0.8275
+2025-04-13 02:27:11,681 - src.training.trainer - INFO - Timed checkpoint saved at models/distilbert/checkpoint_distilbert_time_1744525630.pt
+2025-04-13 02:58:01,854 - src.training.trainer - INFO - Epoch 2/3 - Train loss: 0.3923, accuracy: 0.8359 | Val loss: 0.3884, accuracy: 0.8377         
+✓ Output directory models/distilbert is writable.
+2025-04-13 02:58:02,103 - src.training.trainer - INFO - ✓ Model saved successfully to models/distilbert/best_distilbert.pt (253.21 MB)
+2025-04-13 02:58:02,104 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/distilbert/best_distilbert.pt
+2025-04-13 02:58:02,104 - src.training.trainer - INFO - New best model saved with validation accuracy: 0.8377
+2025-04-13 02:58:04,152 - src.training.trainer - INFO - Timed checkpoint saved at models/distilbert/checkpoint_distilbert_time_1744527482.pt
+2025-04-13 03:42:19,773 - src.training.trainer - INFO - Epoch 3/3 - Train loss: 0.3451, accuracy: 0.8559 | Val loss: 0.3820, accuracy: 0.8409         
+✓ Output directory models/distilbert is writable.
+2025-04-13 03:42:20,001 - src.training.trainer - INFO - ✓ Model saved successfully to models/distilbert/best_distilbert.pt (253.21 MB)
+2025-04-13 03:42:20,001 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/distilbert/best_distilbert.pt
+2025-04-13 03:42:20,001 - src.training.trainer - INFO - New best model saved with validation accuracy: 0.8409
+2025-04-13 03:42:22,323 - src.training.trainer - INFO - Timed checkpoint saved at models/distilbert/checkpoint_distilbert_time_1744530140.pt
+2025-04-13 03:42:22,949 - src.training.trainer - INFO - ✓ Model saved successfully to models/distilbert/final_distilbert.pt (253.21 MB)
+2025-04-13 03:42:22,949 - src.training.trainer - INFO - Absolute path of saved file: /home/david/ml/Advanced Deep Learning - AIGC-5500-0NA/Final Project/yelp-reviews-sentiment-analysis/models/distilbert/final_distilbert.pt
+2025-04-13 03:42:22,949 - src.training.trainer - INFO - Final model saved to models/distilbert/final_distilbert.pt
+2025-04-13 03:42:22,949 - src.training.trainer - INFO - Training completed in 6401.38 seconds (106.69 minutes)
+2025-04-13 03:42:22,978 - distilbert_training - INFO - Tokenizer saved to models/distilbert/tokenizer
+2025-04-13 03:42:22,978 - distilbert_training - INFO - Generating training plots...
+2025-04-13 03:42:23,495 - src.utils.visualization - INFO - Training history plot saved to models/distilbert/training_history.png
+2025-04-13 03:42:23,496 - distilbert_training - INFO - Evaluating on test set...                     
+2025-04-13 03:43:38,463 - distilbert_training - INFO - Test Results:
+2025-04-13 03:43:38,464 - distilbert_training - INFO -   Loss: 0.3755
+2025-04-13 03:43:38,464 - distilbert_training - INFO -   Accuracy: 0.8435
+2025-04-13 03:43:38,464 - distilbert_training - INFO -   F1 Score: 0.8415
+2025-04-13 03:43:38,464 - distilbert_training - INFO - Training completed successfully!

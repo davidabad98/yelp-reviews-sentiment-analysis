@@ -179,5 +179,17 @@ data/raw
 data/processed
 data/embeddings
 scripts/test.py
-models/lstm
-models/distilbert
+
+# Ignore everything in models/distilbert
+models/lstm/*
+
+# But exclude these specific files
+!models/lstm/LSTMTrainingResults.txt
+!models/lstm/training_history.png
+
+# Ignore everything in models/distilbert
+models/distilbert/*
+
+# But exclude these specific files
+!models/distilbert/DistilBertTrainingResults.txt
+!models/distilbert/training_history.png
