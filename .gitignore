@@ -193,3 +193,4 @@ models/distilbert/*
 # But exclude these specific files
 !models/distilbert/DistilBertTrainingResults.txt
 !models/distilbert/training_history.png
+README copy.md
